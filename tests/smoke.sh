@@ -49,6 +49,8 @@ export UGREEN_FAN_SKIP_SENSORS=1
 [ "$(cat "$HWMON/pwm3_auto_point3_temp")" = "42000" ]
 grep -q '^AUTO_TARGET_C=35$' "$CONF"
 grep -q '^CHANNELS=auto$' "$CONF"
+it8613_status="$("$ROOT_DIR/fan" status)"
+printf '%s\n' "$it8613_status" | grep -Eq '^pwm2 +2 +128 +1900 *$'
 
 "$ROOT_DIR/fan" full >/dev/null
 [ "$(cat "$HWMON/pwm2_enable")" = "0" ]
@@ -102,7 +104,8 @@ done
 export UGREEN_FAN_HWMON="$EC_HWMON"
 export UGREEN_FAN_CONFIG="$EC_CONF"
 
-"$ROOT_DIR/fan" status | grep -q '^pwm4 '
+ec_status="$("$ROOT_DIR/fan" status)"
+printf '%s\n' "$ec_status" | grep -q '^pwm4 '
 
 "$ROOT_DIR/fan" 50% >/dev/null
 for n in 1 2 3 4; do
@@ -115,6 +118,8 @@ for n in 1 2 3 4; do
   [ "$(cat "$EC_HWMON/pwm${n}_enable")" = "1" ]
   [ "$(cat "$EC_HWMON/pwm${n}")" = "255" ]
 done
+ec_status="$("$ROOT_DIR/fan" status)"
+printf '%s\n' "$ec_status" | grep -Eq '^pwm1 +1 +255 +1500 *$'
 
 # Sentinel curve files expose any it8613 curve programming on the EC path.
 for n in 1 2 3 4; do
@@ -127,6 +132,8 @@ for n in 1 2 3 4; do
   [ "$(cat "$EC_HWMON/pwm${n}")" = "255" ]
   [ "$(cat "$EC_HWMON/pwm${n}_auto_start")" = "sentinel" ]
 done
+ec_status="$("$ROOT_DIR/fan" status)"
+printf '%s\n' "$ec_status" | grep -Eq '^pwm1 +2 +- +1500 *$'
 rm -f "$EC_HWMON"/pwm*_auto_start
 grep -q '^AUTO_TARGET_C=40$' "$EC_CONF"
 grep -q '^CHANNELS=auto$' "$EC_CONF"

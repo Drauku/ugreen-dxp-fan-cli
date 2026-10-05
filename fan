@@ -257,7 +257,7 @@ read_attr() {
     printf '?'
     return 0
   }
-  tr -d '\n' < "$path"
+  tr -d '\n' < "$path" 2>/dev/null || printf '?'
 }
 
 write_attr() {
@@ -620,6 +620,10 @@ status() {
   for channel in $CHANNELS; do
     enable="$(read_attr "$hwmon/${channel}_enable")"
     pwm="$(read_attr "$hwmon/$channel")"
+    # In EC auto mode the it5571 duty register holds the last manual value.
+    if is_ec_chip && [ "$enable" = "2" ]; then
+      pwm="-"
+    fi
     fan_num="${channel#pwm}"
     fan_input="$hwmon/fan${fan_num}_input"
     printf '%-8s %-7s %-7s %-8s\n' "$channel" "$enable" "$pwm" "$(read_attr "$fan_input")"

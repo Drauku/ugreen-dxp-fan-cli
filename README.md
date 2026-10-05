@@ -105,6 +105,7 @@ The iDX6011 Pro fans are driven by the embedded controller, which supports only 
 | `fan auto`, `fan 35c` | Returns all fans to the EC firmware curve (`pwmN_enable=2`). `fan 35c` saves the target, but the EC cannot use it. |
 | `fan full`, `fan max` | Manual mode at PWM 255. |
 | `fan 50%`, `fan 128` | Manual mode at that duty on every channel. |
+| `fan status` | Shows `-` for PWM on channels in EC auto mode, where the duty register holds the last manual value. |
 
 For temperature-following curves on this model, use `ugreen-fan-control.service` from [IT-Kuny/UGREEN-DXP-FAN-NAS-Driver](https://github.com/IT-Kuny/UGREEN-DXP-FAN-NAS-Driver) in a curve mode (`silent`, `quiet`, `turbo`) and keep `fan` for status and graphs. Run only one fan manager: that service writes PWM only when its computed target changes, so `fan` commands and `ugreen-fan-auto.service` at boot override it until then. Disable `ugreen-fan-auto.service` when using the curve service, and pass `--no-enable` when reinstalling `fan`.
 
