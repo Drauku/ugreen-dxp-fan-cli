@@ -47,6 +47,8 @@ export UGREEN_FAN_SKIP_SENSORS=1
 [ "$(cat "$HWMON/pwm3_enable")" = "2" ]
 [ "$(cat "$HWMON/pwm2_auto_point2_temp")" = "35000" ]
 [ "$(cat "$HWMON/pwm3_auto_point3_temp")" = "42000" ]
+[ "$(cat "$HWMON/pwm2_auto_point1_temp")" = "0" ]
+[ "$(cat "$HWMON/pwm3_auto_point1_temp")" = "0" ]
 grep -q '^AUTO_TARGET_C=35$' "$CONF"
 grep -q '^CHANNELS=auto$' "$CONF"
 it8613_status="$("$ROOT_DIR/fan" status)"
@@ -175,6 +177,7 @@ for n in 2 3; do
   printf '%s\n' 1 > "$DXP_HWMON/pwm${n}_auto_channels_temp"
   printf '%s\n' 51 > "$DXP_HWMON/pwm${n}_auto_start"
 done
+printf '%s\n' 12345 > "$DXP_HWMON/pwm4_auto_point1_temp"
 # A directory makes any write fail, like it87 rejecting the selector.
 mkdir "$DXP_HWMON/pwm4_auto_channels_temp"
 export UGREEN_FAN_HWMON="$DXP_HWMON"
@@ -193,7 +196,7 @@ printf '%s\n' "$dxp_status" | grep -q '^pwm4 '
 [ "$(cat "$DXP_HWMON/pwm3_auto_start")" = "150" ]
 [ "$(cat "$DXP_HWMON/pwm4_enable")" = "1" ]
 [ "$(cat "$DXP_HWMON/pwm4")" = "102" ]
-[ "$(cat "$DXP_HWMON/pwm4_auto_point1_temp")" = "0" ]
+[ "$(cat "$DXP_HWMON/pwm4_auto_point1_temp")" = "12345" ]
 grep -q '^FIXED_PWM_PERCENT=40$' "$DXP_CONF"
 printf '%s\n' 1 > "$DXP_HWMON/pwm4_auto_point2_temp"
 dxp_status="$("$ROOT_DIR/fan" status)"

@@ -84,15 +84,17 @@ fan graph interval 30 # poll every 30 seconds
 
 For the default `35c` target the CLI programs:
 
-| Channel | Sensor | Point 1 | Point 2 | Point 3 | Start PWM |
+| Channel | Sensor | Point 1 (stop) | Point 2 (start) | Point 3 (full) | Start PWM |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `pwm2` | `temp1` | `30c` | `35c` | `55c` | `180` |
-| `pwm3` | `temp2` | `25c` | `32c` | `42c` | `150` |
+| `pwm2` | `temp1` | `0c` | `35c` | `55c` | `180` |
+| `pwm3` | `temp2` | `0c` | `32c` | `42c` | `150` |
 
-Changing the target shifts the curve:
+In the `it87` curve, the fan stops below point 1, runs at the start PWM from point 2, and reaches full speed at point 3. Point 1 is always `0c`, so `fan auto` never stops a fan.
 
-- `pwm2`: `target - 5c`, `target`, `target + 20c`
-- `pwm3`: `target - 10c`, `target - 3c`, `target + 7c`
+Changing the target shifts points 2 and 3:
+
+- `pwm2`: `target`, `target + 20c`
+- `pwm3`: `target - 3c`, `target + 7c`
 
 This is intentionally conservative. On the DXP4800 Plus tested, the previous invalid/weak auto settings let the CPU package hit the thermal limit. This curve keeps hardware auto mode but gives it a more useful fan response.
 

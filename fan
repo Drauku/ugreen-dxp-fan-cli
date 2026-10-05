@@ -720,13 +720,15 @@ apply_auto_channel() {
   local start_pwm="$7"
   local slope="$8"
 
-  write_if_exists "$hwmon/${channel}_auto_channels_temp" "$temp_channel"
+  # it87 rejects auto mode unless points are ordered, and applies a
+  # temperature selector only once auto mode is on.
   write_if_exists "$hwmon/${channel}_auto_start" "$start_pwm"
   write_if_exists "$hwmon/${channel}_auto_slope" "$slope"
   write_if_exists "$hwmon/${channel}_auto_point1_temp" "$point1"
   write_if_exists "$hwmon/${channel}_auto_point2_temp" "$point2"
   write_if_exists "$hwmon/${channel}_auto_point3_temp" "$point3"
   write_attr "$hwmon/${channel}_enable" 2
+  write_if_exists "$hwmon/${channel}_auto_channels_temp" "$temp_channel"
 }
 
 apply_auto() {
@@ -750,10 +752,11 @@ apply_auto() {
     fi
   done
 
-  cpu_point1=$(((target_c - 5) * 1000))
+  # auto_point1_temp is the it87 fan-stop threshold; 0 keeps fans spinning.
+  cpu_point1=0
   cpu_point2=$((target_c * 1000))
   cpu_point3=$(((target_c + 20) * 1000))
-  case_point1=$(((target_c - 10) * 1000))
+  case_point1=0
   case_point2=$(((target_c - 3) * 1000))
   case_point3=$(((target_c + 7) * 1000))
 
