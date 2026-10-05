@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Support the UGREEN DXP6800 Pro: `CHANNELS=auto` selects `pwm2 pwm3 pwm4` when the DMI product name is `DXP6800 Pro`.
+- On it8613, `fan auto` holds `pwm4`/`pwm5` at `FIXED_PWM_PERCENT` (default 40, range 20-100) in manual mode; `it87` cannot program their curves because their `auto_point` attributes write `pwm3`'s registers.
+- `fan status` omits curve attributes for fixed-duty channels.
+- The installer warns when a DXP6800 Pro config sets explicit `CHANNELS`.
 - Support the UGREEN iDX6011 Pro `it5571` EC backend: detect the hwmon device, drive `pwm1`-`pwm4`, use manual PWM 255 for `full`, and hand fans back to the EC firmware curve for `auto`.
 - Add `CHANNELS=auto`, which picks fan channels for the detected chip; new installs write it by default. Older `fan` versions reject `CHANNELS=auto`, so set explicit channels before downgrading.
 - Warn during install when `ugreen-fan-control.service` is active.

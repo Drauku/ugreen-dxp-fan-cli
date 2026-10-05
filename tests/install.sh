@@ -56,6 +56,7 @@ run_env() {
     PATH="$FAKE_BIN:$PATH" \
     SYSTEMCTL_LOG="$root/systemctl.log" \
     FAKE_ACTIVE_UNITS="${FAKE_ACTIVE_UNITS:-}" \
+    UGREEN_FAN_DMI_PRODUCT="${UGREEN_FAN_DMI_PRODUCT:-$root/no-dmi}" \
     FAKE_CURL_SOURCE="$ROOT_DIR/fan" \
     UGREEN_FAN_ALLOW_NONROOT=1 \
     UGREEN_FAN_PREFIX="$root/usr/local" \
@@ -105,6 +106,7 @@ assert_file "$install_root/etc/systemd/system/ugreen-fan-graph.timer"
 
 assert_grep '^AUTO_TARGET_C=40$' "$install_root/etc/ugreen-fan.conf"
 assert_grep '^CHANNELS=auto$' "$install_root/etc/ugreen-fan.conf"
+assert_grep '^FIXED_PWM_PERCENT=40$' "$install_root/etc/ugreen-fan.conf"
 assert_grep '^GRAPH_ENABLED=1$' "$install_root/etc/ugreen-fan.conf"
 assert_grep '^GRAPH_INTERVAL_SEC=15$' "$install_root/etc/ugreen-fan.conf"
 assert_grep "HISTORY_FILE=\"$install_root/var/lib/ugreen-fan/history.tsv\"" "$install_root/etc/ugreen-fan.conf"
@@ -143,6 +145,30 @@ mkdir -p "$nochan_root/etc"
 printf 'AUTO_TARGET_C=35\n' > "$nochan_root/etc/ugreen-fan.conf"
 run_env "$nochan_root" bash "$ROOT_DIR/install.sh" --no-start >/dev/null
 assert_grep '^CHANNELS=auto$' "$nochan_root/etc/ugreen-fan.conf"
+
+dxp_root="$TMP_DIR/dxp-root"
+mkdir -p "$dxp_root/etc"
+printf 'AUTO_TARGET_C=35\nCHANNELS="pwm2 pwm3"\n' > "$dxp_root/etc/ugreen-fan.conf"
+printf 'DXP6800 Pro\n' > "$dxp_root/product_name"
+dxp_output="$(UGREEN_FAN_DMI_PRODUCT="$dxp_root/product_name" run_env "$dxp_root" bash "$ROOT_DIR/install.sh" --no-start 2>&1 >/dev/null)"
+printf '%s\n' "$dxp_output" | grep -q 'set CHANNELS=auto to include DXP6800 Pro pwm4' || {
+  printf 'missing DXP6800 Pro CHANNELS warning\n' >&2
+  exit 1
+}
+assert_grep '^CHANNELS="pwm2 pwm3"$' "$dxp_root/etc/ugreen-fan.conf"
+for chan in 'CHANNELS="auto"' 'CHANNELS="pwm2 pwm3 pwm4"'; do
+  printf 'AUTO_TARGET_C=35\n%s\n' "$chan" > "$dxp_root/etc/ugreen-fan.conf"
+  dxp_output="$(UGREEN_FAN_DMI_PRODUCT="$dxp_root/product_name" run_env "$dxp_root" bash "$ROOT_DIR/install.sh" --no-start 2>&1 >/dev/null)"
+  if printf '%s\n' "$dxp_output" | grep -q 'DXP6800 Pro'; then
+    printf 'DXP6800 Pro warning shown for %s\n' "$chan" >&2
+    exit 1
+  fi
+done
+legacy_output="$(run_env "$legacy_root" bash "$ROOT_DIR/install.sh" --no-start 2>&1 >/dev/null)"
+if printf '%s\n' "$legacy_output" | grep -q 'DXP6800 Pro'; then
+  printf 'DXP6800 Pro warning shown on another model\n' >&2
+  exit 1
+fi
 
 warn_root="$TMP_DIR/warn-root"
 mkdir -p "$warn_root"

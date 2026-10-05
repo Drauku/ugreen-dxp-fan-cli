@@ -1,6 +1,6 @@
 # UGREEN DXP Fan CLI
 
-Simple fan control CLI for UGREEN DXP4800 Plus and iDX6011 Pro NAS systems running Debian or Proxmox with the UGREEN `it87` hwmon driver.
+Simple fan control CLI for UGREEN DXP4800 Plus, DXP6800 Pro and iDX6011 Pro NAS systems running Debian or Proxmox with the UGREEN `it87` hwmon driver.
 
 This repo does not replace the kernel driver. It installs a clean `fan` command and a boot service that applies a safe hardware-auto curve by default.
 
@@ -96,6 +96,22 @@ Changing the target shifts the curve:
 
 This is intentionally conservative. On the DXP4800 Plus tested, the previous invalid/weak auto settings let the CPU package hit the thermal limit. This curve keeps hardware auto mode but gives it a more useful fan response.
 
+## DXP6800 Pro
+
+The DXP6800 Pro uses the same IT8613E chip as the DXP4800 Plus, with three fans:
+
+| Channel | Fan | `fan auto` |
+| --- | --- | --- |
+| `pwm2` | CPU fan | Hardware curve on `temp1` (CPU) |
+| `pwm3` | Rear system fan | Hardware curve on `temp2` (board) |
+| `pwm4` | Rear system fan | Fixed `FIXED_PWM_PERCENT` (default 40%) |
+
+`CHANNELS=auto` selects `pwm2 pwm3 pwm4` when the DMI product name is `DXP6800 Pro`. Configs written by older installers contain `CHANNELS="pwm2 pwm3"`; change that line to `CHANNELS=auto` to include `pwm4`.
+
+The `it87` driver cannot program an IT8613E `pwm4`/`pwm5` curve: their `auto_point` temperature attributes write `pwm3`'s registers. `fan auto` therefore runs `pwm4`/`pwm5` in manual mode at `FIXED_PWM_PERCENT` (20-100). No hardware curve on this board follows drive temperatures; raise `FIXED_PWM_PERCENT` for sustained drive workloads.
+
+The stock kernel `it87` does not support the IT8613E. Do not work around it with `force_id=0x8628`: the IT8628E register layout differs for PWM4/PWM5.
+
 ## iDX6011 Pro
 
 The iDX6011 Pro fans are driven by the embedded controller, which supports only manual duty and its own firmware curve:
@@ -153,9 +169,10 @@ CHANNELS=auto
 GRAPH_ENABLED=1
 GRAPH_INTERVAL_SEC=10
 HISTORY_FILE="/var/lib/ugreen-fan/history.tsv"
+FIXED_PWM_PERCENT=40
 ```
 
-`CHANNELS=auto` uses `pwm2 pwm3` on `it8613` and `pwm1 pwm2 pwm3 pwm4` on `it5571`. If another UGREEN model exposes different PWM channels, set `CHANNELS` explicitly, for example `CHANNELS="pwm1 pwm2"`.
+`CHANNELS=auto` uses `pwm2 pwm3` on `it8613`, `pwm2 pwm3 pwm4` on the DXP6800 Pro, and `pwm1 pwm2 pwm3 pwm4` on `it5571`. If another UGREEN model exposes different PWM channels, set `CHANNELS` explicitly, for example `CHANNELS="pwm1 pwm2"`.
 
 ## Fan Graph
 

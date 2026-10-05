@@ -9,6 +9,9 @@ DEFAULT_TARGET_C=35
 DEFAULT_CHANNELS="auto"
 IT8613_CHANNELS="pwm2 pwm3"
 IT5571_CHANNELS="pwm1 pwm2 pwm3 pwm4"
+DXP6800_PRO_CHANNELS="pwm2 pwm3 pwm4"
+DEFAULT_FIXED_PWM_PERCENT=40
+DMI_PRODUCT_FILE="${UGREEN_FAN_DMI_PRODUCT:-/sys/class/dmi/id/product_name}"
 DEFAULT_HISTORY_FILE="/var/lib/ugreen-fan/history.tsv"
 DEFAULT_GRAPH_ENABLED=1
 DEFAULT_GRAPH_INTERVAL_SEC=10
@@ -48,7 +51,11 @@ Config:
 
 CHANNELS=auto picks the fan channels for the detected chip:
   it8613/it87 (DXP4800 Plus)  pwm2 pwm3
+  it8613 (DXP6800 Pro)        pwm2 pwm3 pwm4
   it5571 (iDX6011 Pro EC)     pwm1 pwm2 pwm3 pwm4
+
+On it8613, it87 cannot program pwm4/pwm5 curves, so 'fan auto' holds
+them at FIXED_PWM_PERCENT (20-100, default 40%).
 EOF
 }
 
@@ -67,6 +74,7 @@ load_config() {
   HISTORY_FILE="$DEFAULT_HISTORY_FILE"
   GRAPH_ENABLED="$DEFAULT_GRAPH_ENABLED"
   GRAPH_INTERVAL_SEC="$DEFAULT_GRAPH_INTERVAL_SEC"
+  FIXED_PWM_PERCENT="$DEFAULT_FIXED_PWM_PERCENT"
 
   if [ -f "$CONFIG_FILE" ]; then
     # shellcheck source=/dev/null
@@ -81,6 +89,11 @@ load_config() {
   validate_channels "$CHANNELS"
   validate_graph_enabled "$GRAPH_ENABLED"
   validate_graph_interval "$GRAPH_INTERVAL_SEC"
+  if ! [[ "$FIXED_PWM_PERCENT" =~ ^[0-9]+$ ]]; then
+    warn "FIXED_PWM_PERCENT is not a number; using $DEFAULT_FIXED_PWM_PERCENT"
+    FIXED_PWM_PERCENT="$DEFAULT_FIXED_PWM_PERCENT"
+  fi
+  FIXED_PWM_PERCENT=$((10#$FIXED_PWM_PERCENT))
 }
 
 save_config() {
@@ -104,6 +117,8 @@ save_config_all() {
     printf '%s\n' "# Graph history is collected by ugreen-fan-graph.timer."
     printf 'GRAPH_ENABLED=%s\n' "$GRAPH_ENABLED"
     printf 'GRAPH_INTERVAL_SEC=%s\n' "$GRAPH_INTERVAL_SEC"
+    printf '%s\n' "# FIXED_PWM_PERCENT is the 'fan auto' duty for it8613 pwm4/pwm5, which have no programmable curve."
+    printf 'FIXED_PWM_PERCENT=%q\n' "$FIXED_PWM_PERCENT"
     printf 'HISTORY_FILE=%q\n' "$HISTORY_FILE"
   } > "$tmp"
   chmod 0644 "$tmp"
@@ -126,6 +141,12 @@ validate_percent() {
   local pct="$1"
   [[ "$pct" =~ ^[0-9]+$ ]] || die "percentage must be a number from 0% to 100%"
   [ "$pct" -ge 0 ] && [ "$pct" -le 100 ] || die "percentage must be from 0% to 100%"
+}
+
+validate_fixed_percent() {
+  local pct="$1"
+  [[ "$pct" =~ ^[0-9]+$ ]] || die "FIXED_PWM_PERCENT must be a number from 20 to 100"
+  [ "$pct" -ge 20 ] && [ "$pct" -le 100 ] || die "FIXED_PWM_PERCENT must be from 20 to 100"
 }
 
 validate_channels() {
@@ -168,7 +189,7 @@ interval_arg_to_sec() {
 percent_to_pwm() {
   local pct="$1"
   validate_percent "$pct"
-  printf '%s\n' $(((pct * 255 + 50) / 100))
+  printf '%s\n' $(((10#$pct * 255 + 50) / 100))
 }
 
 temp_arg_to_c() {
@@ -229,7 +250,25 @@ resolve_chip() {
   [ "$CHANNELS" = "auto" ] || return 0
   case "$CHIP" in
     it5571) CHANNELS="$IT5571_CHANNELS" ;;
+    it8613)
+      if [ "$(read_attr "$DMI_PRODUCT_FILE")" = "DXP6800 Pro" ]; then
+        CHANNELS="$DXP6800_PRO_CHANNELS"
+      else
+        CHANNELS="$IT8613_CHANNELS"
+      fi
+      ;;
     *) CHANNELS="$IT8613_CHANNELS" ;;
+  esac
+}
+
+# it87 cannot program an it8613 pwm4/pwm5 curve: their auto_point
+# attributes write pwm3's registers. These channels run at a fixed duty.
+is_fixed_channel() {
+  local channel="$1"
+  [ "${CHIP:-}" = "it8613" ] || return 1
+  case "$channel" in
+    pwm4|pwm5) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -631,7 +670,7 @@ status() {
 
   printf '\n'
   for channel in $CHANNELS; do
-    print_auto_attr "$hwmon" "$channel"
+    is_fixed_channel "$channel" || print_auto_attr "$hwmon" "$channel"
   done
 
   if [ "${UGREEN_FAN_SKIP_SENSORS:-0}" != "1" ] && command -v sensors >/dev/null 2>&1; then
@@ -704,6 +743,12 @@ apply_auto() {
     release_to_ec "$hwmon"
     return 0
   fi
+  for channel in $CHANNELS; do
+    if is_fixed_channel "$channel"; then
+      validate_fixed_percent "$FIXED_PWM_PERCENT"
+      break
+    fi
+  done
 
   cpu_point1=$(((target_c - 5) * 1000))
   cpu_point2=$((target_c * 1000))
@@ -714,6 +759,11 @@ apply_auto() {
 
   idx=0
   for channel in $CHANNELS; do
+    if is_fixed_channel "$channel"; then
+      write_attr "$hwmon/${channel}_enable" 1
+      write_attr "$hwmon/$channel" "$(percent_to_pwm "$FIXED_PWM_PERCENT")"
+      continue
+    fi
     idx=$((idx + 1))
     if [ "$idx" -eq 1 ]; then
       apply_auto_channel "$hwmon" "$channel" 1 "$cpu_point1" "$cpu_point2" "$cpu_point3" 180 16

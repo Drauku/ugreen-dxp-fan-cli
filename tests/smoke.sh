@@ -158,4 +158,95 @@ printf '%s\n' 2 > "$EC_HWMON/pwm3_enable"
 [ "$(cat "$EC_HWMON/pwm1_enable")" = "1" ]
 [ "$(cat "$EC_HWMON/pwm3_enable")" = "2" ]
 
+# DXP6800 Pro: it8613 with pwm2-pwm4; pwm4 has no usable hardware curve.
+DXP_HWMON="$TMP_DIR/hwmon2"
+DXP_CONF="$TMP_DIR/ugreen-fan-dxp6800.conf"
+DXP_DMI="$TMP_DIR/product_name"
+mkdir -p "$DXP_HWMON"
+printf '%s\n' it8613 > "$DXP_HWMON/name"
+printf '%s\n' 'DXP6800 Pro' > "$DXP_DMI"
+for n in 2 3 4; do
+  printf '%s\n' 2 > "$DXP_HWMON/pwm${n}_enable"
+  printf '%s\n' 51 > "$DXP_HWMON/pwm${n}"
+  printf '%s\n' 1000 > "$DXP_HWMON/fan${n}_input"
+  printf '%s\n' 0 > "$DXP_HWMON/pwm${n}_auto_point1_temp"
+done
+for n in 2 3; do
+  printf '%s\n' 1 > "$DXP_HWMON/pwm${n}_auto_channels_temp"
+  printf '%s\n' 51 > "$DXP_HWMON/pwm${n}_auto_start"
+done
+# A directory makes any write fail, like it87 rejecting the selector.
+mkdir "$DXP_HWMON/pwm4_auto_channels_temp"
+export UGREEN_FAN_HWMON="$DXP_HWMON"
+export UGREEN_FAN_CONFIG="$DXP_CONF"
+export UGREEN_FAN_DMI_PRODUCT="$DXP_DMI"
+
+dxp_status="$("$ROOT_DIR/fan" status)"
+printf '%s\n' "$dxp_status" | grep -q '^pwm4 '
+
+"$ROOT_DIR/fan" 35c >/dev/null
+[ "$(cat "$DXP_HWMON/pwm2_enable")" = "2" ]
+[ "$(cat "$DXP_HWMON/pwm2_auto_channels_temp")" = "1" ]
+[ "$(cat "$DXP_HWMON/pwm2_auto_start")" = "180" ]
+[ "$(cat "$DXP_HWMON/pwm3_enable")" = "2" ]
+[ "$(cat "$DXP_HWMON/pwm3_auto_channels_temp")" = "2" ]
+[ "$(cat "$DXP_HWMON/pwm3_auto_start")" = "150" ]
+[ "$(cat "$DXP_HWMON/pwm4_enable")" = "1" ]
+[ "$(cat "$DXP_HWMON/pwm4")" = "102" ]
+[ "$(cat "$DXP_HWMON/pwm4_auto_point1_temp")" = "0" ]
+grep -q '^FIXED_PWM_PERCENT=40$' "$DXP_CONF"
+printf '%s\n' 1 > "$DXP_HWMON/pwm4_auto_point2_temp"
+dxp_status="$("$ROOT_DIR/fan" status)"
+if printf '%s\n' "$dxp_status" | grep -q '^pwm4_auto'; then
+  printf '%s\n' 'fan status printed curve attributes for fixed pwm4' >&2
+  exit 1
+fi
+printf '%s\n' "$dxp_status" | grep -q '^pwm3_auto_point1_temp'
+grep -q '^CHANNELS=auto$' "$DXP_CONF"
+
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=60/' "$DXP_CONF"
+"$ROOT_DIR/fan" auto >/dev/null
+[ "$(cat "$DXP_HWMON/pwm4")" = "153" ]
+
+"$ROOT_DIR/fan" full >/dev/null
+for n in 2 3 4; do
+  [ "$(cat "$DXP_HWMON/pwm${n}_enable")" = "0" ]
+done
+
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=10/' "$DXP_CONF"
+printf '%s\n' 2 > "$DXP_HWMON/pwm4_enable"
+if "$ROOT_DIR/fan" auto >/dev/null 2>&1; then
+  printf '%s\n' 'FIXED_PWM_PERCENT below 20 should be rejected' >&2
+  exit 1
+fi
+[ "$(cat "$DXP_HWMON/pwm4_enable")" = "2" ]
+"$ROOT_DIR/fan" status >/dev/null
+"$ROOT_DIR/fan" full >/dev/null
+[ "$(cat "$DXP_HWMON/pwm4_enable")" = "0" ]
+
+# Leading zeros are decimal.
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=080/' "$DXP_CONF"
+"$ROOT_DIR/fan" auto >/dev/null
+[ "$(cat "$DXP_HWMON/pwm4")" = "204" ]
+"$ROOT_DIR/fan" 08% >/dev/null
+[ "$(cat "$DXP_HWMON/pwm2")" = "20" ]
+
+# A malformed value falls back to the default and is never saved as-is.
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT="4 0"/' "$DXP_CONF"
+"$ROOT_DIR/fan" 40c >/dev/null 2>&1
+grep -q '^FIXED_PWM_PERCENT=40$' "$DXP_CONF"
+[ "$(cat "$DXP_HWMON/pwm4")" = "102" ]
+"$ROOT_DIR/fan" full >/dev/null
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=40/' "$DXP_CONF"
+
+# Other it8613 boards keep pwm2/pwm3 only.
+printf '%s\n' 'DXP4800 Plus' > "$DXP_DMI"
+printf '%s\n' 77 > "$DXP_HWMON/pwm4"
+printf '%s\n' 2 > "$DXP_HWMON/pwm4_enable"
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=10/' "$DXP_CONF"
+"$ROOT_DIR/fan" auto >/dev/null
+sed -i 's/^FIXED_PWM_PERCENT=.*/FIXED_PWM_PERCENT=40/' "$DXP_CONF"
+[ "$(cat "$DXP_HWMON/pwm4")" = "77" ]
+[ "$(cat "$DXP_HWMON/pwm4_enable")" = "2" ]
+
 printf '%s\n' 'smoke tests passed'

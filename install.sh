@@ -9,6 +9,7 @@ MODULES_LOAD_DIR="${UGREEN_FAN_MODULES_LOAD_DIR:-$ETC_DIR/modules-load.d}"
 MODPROBE_DIR="${UGREEN_FAN_MODPROBE_DIR:-$ETC_DIR/modprobe.d}"
 VAR_LIB_DIR="${UGREEN_FAN_VAR_LIB_DIR:-/var/lib/ugreen-fan}"
 HISTORY_FILE="${UGREEN_FAN_HISTORY:-$VAR_LIB_DIR/history.tsv}"
+DMI_PRODUCT_FILE="${UGREEN_FAN_DMI_PRODUCT:-/sys/class/dmi/id/product_name}"
 SERVICE_FAN_BIN="${UGREEN_FAN_SERVICE_BIN:-$PREFIX/bin/fan}"
 TARGET_C=35
 ENABLE_SERVICE=1
@@ -171,12 +172,17 @@ CHANNELS=auto
 GRAPH_ENABLED=$GRAPH_ENABLED
 GRAPH_INTERVAL_SEC=$GRAPH_INTERVAL_SEC
 HISTORY_FILE="$HISTORY_FILE"
+# FIXED_PWM_PERCENT is the 'fan auto' duty for it8613 pwm4/pwm5, which have no programmable curve.
+FIXED_PWM_PERCENT=40
 EOF
   chmod 0644 "$CONFIG_FILE"
 else
   set_config_key AUTO_TARGET_C "$TARGET_C"
   if ! grep -q '^CHANNELS=' "$CONFIG_FILE"; then
     printf '%s\n' 'CHANNELS=auto' >> "$CONFIG_FILE"
+  elif [ "$(cat "$DMI_PRODUCT_FILE" 2>/dev/null)" = "DXP6800 Pro" ] &&
+       ! [[ "$(sed -n 's/^CHANNELS=//p' "$CONFIG_FILE" | tr -d "\"'")" =~ ^auto$|(^|[[:space:]])pwm4([[:space:]]|$) ]]; then
+    printf '%s\n' "install.sh: warning: $CONFIG_FILE sets explicit CHANNELS; set CHANNELS=auto to include DXP6800 Pro pwm4." >&2
   fi
   set_config_key GRAPH_ENABLED "$GRAPH_ENABLED"
   set_config_key GRAPH_INTERVAL_SEC "$GRAPH_INTERVAL_SEC"
